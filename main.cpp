@@ -44,6 +44,12 @@ int drop_mess;
 char * change1;
 char * change2;
 
+void sendpacket(struct iphdr *ipp, struct tcphdr *tp, uint8_t *packet)
+{
+    memcpy(packet,&ipp,sizeof(ipp));
+    memcpy(packet,&tp,sizeof(tp));
+}
+
 void search(char *body, char *find, int length)
 {
     int len = strlen(body);
@@ -62,7 +68,7 @@ void search(char *body, char *find, int length)
                 find++;
 
     }
-printf("\n\n%s\n\n",find);
+
 }
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -126,8 +132,9 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     char *body = change1;
                     char *find = (char*)data;
                     search(body,find,ret);
+                    printf("%s \n",find);
 
-                    //checksum
+                    //checksum < -- fix here!!
                     //1.IP헤더(상위프로토콜 + 송신자IP주소 + 발신자 IP 주소) + TCP 헤더길이
                     struct cspack cs;
                     uint16_t csp[5];
@@ -162,6 +169,11 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("\n tcp header sum = %04x  \n",sum2);
 */
                     //checksum
+
+                    //send packet
+                    uint8_t *packet;
+
+                    //sendpacket(ipp, tp, packet);  <- fix here first
                     for(; ret>0; ret--)
                     {
                         uint32_t *host_start = (uint32_t *)data;
