@@ -25,7 +25,6 @@ struct cspack
     uint32_t dd;
     uint16_t offset;
 };
-
 struct thsum
 {
     uint16_t sport;
@@ -36,18 +35,12 @@ struct thsum
     uint8_t flags;
     uint16_t window;
 };
-
 #pragma pack(pop)
 
 char * condi;
 int drop_mess;
 char * change1;
 char * change2;
-
-void sendpacket(struct iphdr *ipp, struct tcphdr *tp, uint8_t *packet)
-{
-
-}
 
 void search(char *body, char *find, int length)
 {
@@ -65,7 +58,6 @@ void search(char *body, char *find, int length)
             }
             else
                 find++;
-
     }
 
 }
@@ -169,10 +161,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 */
                     //checksum
 
-                    //send packet
-                    uint8_t *packet;
 
-                    //sendpacket(ipp, tp, packet);  <- fix here first
                     for(; ret>0; ret--)
                     {
                         uint32_t *host_start = (uint32_t *)data;
