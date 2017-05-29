@@ -46,8 +46,7 @@ char * change2;
 
 void sendpacket(struct iphdr *ipp, struct tcphdr *tp, uint8_t *packet)
 {
-    memcpy(packet,&ipp,sizeof(ipp));
-    memcpy(packet,&tp,sizeof(tp));
+
 }
 
 void search(char *body, char *find, int length)
