@@ -25,6 +25,7 @@ struct cspack
     uint32_t dd;
     uint16_t offset;
 };
+
 struct thsum
 {
     uint16_t sport;
@@ -35,6 +36,7 @@ struct thsum
     uint8_t flags;
     uint16_t window;
 };
+
 #pragma pack(pop)
 
 char * condi;
@@ -42,22 +44,29 @@ int drop_mess;
 char * change1;
 char * change2;
 
+void sendpacket(struct iphdr *ipp, struct tcphdr *tp, uint8_t *packet)
+{
+    memcpy(packet,&ipp,sizeof(ipp));
+    memcpy(packet,&tp,sizeof(tp));
+}
+
 void search(char *body, char *find, int length)
 {
     int len = strlen(body);
+
     //printf("%s\n",find);
     for(; length>0; length--)
     {
             if(memcmp(body,find,len)==0)
             {
-                 memcpy(find,change2,7);
-                 //찾은 문자열을 배열에 변수나 배열에 저장하고 change2와 바꾼다.
+                 memcpy(find,change2,len);    //찾은 문자열을 배열에 변수나 배열에 저장하고 change2와 바꾼다.
                  find++;
                  if(find==NULL)
                      break;
             }
             else
                 find++;
+
     }
 
 }
@@ -114,12 +123,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
                 if(ipp->protocol == IPPROTO_TCP)
                 {
-                    data += sizeof(struct iphdr);
-                    data += sizeof(struct tcphdr);
-
+                    data += ipp->ihl*4;
                     struct tcphdr *tp;
-                    tp = (struct tcphdr*)data;
-
+                    tp = (struct tcphdr*)data;  
+                    data += tp->th_off * 4;
                     char *body = change1;
                     char *find = (char*)data;
                     search(body,find,ret);
@@ -161,7 +168,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 */
                     //checksum
 
+                    //send packet
+                    uint8_t *packet;
 
+                    //sendpacket(ipp, tp, packet);  <- fix here first
                     for(; ret>0; ret--)
                     {
                         uint32_t *host_start = (uint32_t *)data;
