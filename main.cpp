@@ -15,26 +15,33 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <iostream>
 
-/* returns packet id */
-
 #pragma pack(push,1)
-struct cspack
+struct pseudo_h
 {
-    uint16_t tcppro;
     uint32_t sd;
     uint32_t dd;
-    uint16_t offset;
+    uint8_t proto;
+    uint8_t reserve;
+    uint16_t tcpleng;
+    struct tcpheader;
 };
 
-struct thsum
+struct tcpheader
 {
-    uint16_t sport;
-    uint16_t dport;
-    uint16_t seqnum;
-    uint16_t acnum;
-    uint16_t offset;
-    uint8_t flags;
-    uint16_t window;
+    u_int16_t sport;		/* source port */
+    u_int16_t dport;		/* destination port */
+    u_int32_t seq;
+    u_int32_t ack_seq;
+    u_int8_t dataoff:4;		/* data offset */
+    u_int8_t flags;
+    u_int16_t window;		/* window */
+    u_int16_t checksum;		/* checksum */
+    u_int16_t urg_p;		/* urgent pointer */
+};
+struct mix
+{
+    struct pseudo_h;
+    struct tcpheader;
 };
 
 #pragma pack(pop)
@@ -44,17 +51,11 @@ int drop_mess;
 char * change1;
 char * change2;
 
-void sendpacket(struct iphdr *ipp, struct tcphdr *tp, uint8_t *packet)
-{
-    memcpy(packet,&ipp,sizeof(ipp));
-    memcpy(packet,&tp,sizeof(tp));
-}
 
 void search(char *body, char *find, int length)
 {
     int len = strlen(body);
 
-    //printf("%s\n",find);
     for(; length>0; length--)
     {
             if(memcmp(body,find,len)==0)
@@ -66,10 +67,10 @@ void search(char *body, char *find, int length)
             }
             else
                 find++;
-
     }
 
 }
+
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
 
@@ -125,53 +126,62 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 {
                     data += ipp->ihl*4;
                     struct tcphdr *tp;
-                    tp = (struct tcphdr*)data;  
+                    tp = (struct tcphdr*)data;
                     data += tp->th_off * 4;
+
                     char *body = change1;
                     char *find = (char*)data;
                     search(body,find,ret);
-                    printf("%s \n",find);
+                    printf("\n\n%s\n",find);
 
-                    //checksum < -- fix here!!
-                    //1.IP헤더(상위프로토콜 + 송신자IP주소 + 발신자 IP 주소) + TCP 헤더길이
-                    struct cspack cs;
+
+                    //pseudo checksum
                     uint16_t csp[5];
-                    cs.tcppro=0x0006;
-                    cs.sd=ntohl(ipp->saddr);
-                    cs.dd=ntohl(ipp->daddr);
-                    cs.offset=tp->doff;
-                    memcpy(csp,&cs,sizeof(cs));
+                    struct pseudo_h *cs;
+                    cs=(struct pseudo_h *)data;
+                    cs->sd=ntohl(ipp->saddr);
+                    cs->dd=ntohl(ipp->daddr);
+                    cs->proto=0x06;
+                    cs->reserve=0;
+                    cs->tcpleng=tp->doff;
+
+                    memcpy(csp,&cs,sizeof(cs));  //sizeof 뭔가 고쳐야할듯?
+
                     int sum;
                     for(int i=0; i<5; i++)
                     {
                         sum += csp[i];
+                        if(sum>=65536)
+                        {
+                            sum=sum-65536+1;
+                        }
                     }
+                    printf("\n qseudo 헤더 = %04x \n",sum);
 
-                    printf("\n IP헤더(상위프로토콜 + 송신자IP주소 + 발신자 IP 주소) + TCP 헤더길이 = %04x\n",sum);
-/*
-                    struct thsum ts;
-                    uint16_t ths[sizeof(ts)];
-                    ts.sport = tp->th_sport;
-                    ts.dport = tp->th_dport;
-                    ts.seqnum = tp->seq;
-                    ts.acnum  = tp->ack_seq;
-                    ts.offset = tp->doff;
-                    ts.flags = tp->th_flags;
-                    ts.window = tp->window;
-                    memcpy(ths,&ts,sizeof(ts));
+                    //tcp checksum
+                     uint16_t tdp[10];
+                    struct tcpheader tcph;
+                    tcph.sport = tp->th_sport;
+                    tcph.dport = tp->th_dport;
+                    tcph.seq = tp->seq;
+                    tcph.ack_seq = tp->ack_seq;
+                    tcph.dataoff = tp->th_off;
+                    tcph.flags = tp->th_flags;
+                    tcph.window = tp->th_win;
+                    tcph.checksum = 0;
+                    tcph.urg_p = tp->urg_ptr;
+
+                    memcpy(tdp,&tcph,sizeof(tcph)); //sizeof 뭔가 고쳐야할듯?
                     int sum2;
-                    for(int i=0; i<7; i++)
+                    for(int i=0; i<10; i++)
                     {
-                        sum2 += ths[i];
+                        sum2 += tdp[i];
+                        if(sum2>=65536)
+                        {
+                            sum2=sum2-65536+1;
+                        }
                     }
-                    printf("\n tcp header sum = %04x  \n",sum2);
-*/
-                    //checksum
 
-                    //send packet
-                    uint8_t *packet;
-
-                    //sendpacket(ipp, tp, packet);  <- fix here first
                     for(; ret>0; ret--)
                     {
                         uint32_t *host_start = (uint32_t *)data;
