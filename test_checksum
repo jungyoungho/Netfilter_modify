@@ -17,8 +17,8 @@ struct pseudo
 {
     uint32_t sd;
     uint32_t dd;
-    uint8_t tcppro;
-    uint8_t reserve;
+    uint16_t tcppro; //?
+    uint16_t reserve; //?
     uint16_t offset;
 };
 struct tcpheader
@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    if(pcap_compile(hd, &fp, argv[2] ,0, net)<0)
+    if(pcap_compile(hd, &fp, argv[2] ,0, net) < 0)
     {
         printf("Compile ERROR\n");
         exit(1);
@@ -137,26 +137,32 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
         if(ipp->protocol==IPPROTO_TCP)
         {
             pkt_data += sizeof(struct iphdr);
+
             int total = ntohs(ipp->tot_len);
             int iphdl = (ipp->ihl)*4;
             printf("total : %d\n",total);
             printf("header len : %d\n",iphdl);
 
             int tcp_tcpdata = total - iphdl;
-            printf("tcph + tcpdata len = %d\n", tcp_tcpdata);
+            int cal_tcp;
+            if(tcp_tcpdata % 2 == 1)
+                cal_tcp=tcp_tcpdata/2 + 1;
+            else
+                cal_tcp=tcp_tcpdata/2;
+
+            printf("tcph + tcpdata len = %d\n", cal_tcp);
             struct pseudo pd;
 
-            uint16_t pdp[6];
-
+            uint16_t pdp[7];
             pd.sd=ntohl(ipp->saddr);
             pd.dd=ntohl(ipp->daddr);
             pd.tcppro=ipp->protocol;
             pd.reserve=0;
-            pd.offset=tcp_tcpdata;
+            pd.offset=tcp_tcpdata; //fix here
 
             memcpy(pdp,&pd,sizeof(pd));
             int sum1=0;
-            for(int i=0; i<6; i++)
+            for(int i=0; i<7; i++)
             {
                 sum1 += pdp[i];
                 if(sum1>=65536)
@@ -164,92 +170,62 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
                     sum1=sum1-65536+1;
                 }
             }
-            printf("\n pseudo = %04x\n", sum1);
 
-
-
-            uint16_t tdata[tcp_tcpdata]{0};
+            uint16_t tdata[cal_tcp]{0};
             int ch_count2{0};
             printf("test\n");
-            int sumleng;
-            sumleng=tcp_tcpdata;
-
-
-
-            while(tcp_tcpdata--)
-            {
-                tdata[tcp_tcpdata] = *pkt_data; //2bytes fix
-                printf("%02x ", *(pkt_data++));
-                if(++ch_count2 % 16 == 0)
-                    printf("\n");
-
-            }
-            printf("\n");
-
             int sumsum{0};
-            for(int i=0; i<=sumleng; i++)
+
+            uint16_t *p = (uint16_t*)pkt_data; //2byte로 받기 위해서 포인터로 집어줌
+            int i=0;
+            while(i<cal_tcp)
             {
+                /*
+                if(tcp_tcpdata % 2==1)
+                {
+                    if(tcp_tcpdata-1==i)
+                        tdata[tcp_tcpdata-1==i]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
+                }
+                else
+                */
+                tdata[i] = ntohs(*(p++));
                 sumsum += tdata[i];
+                i++;
                 if(sumsum>=65536)
                 {
                     sumsum=sumsum-65536+1;
                 }
             }
+            /* temp
+            int j=0;
+            while(j<tcp_tcpdata)
+            {
+            printf("%02x ", *(pkt_data++));
+            j++;
+            if(++ch_count2 % 16 == 0)
+                printf("\n");
+            }
+            */
+
+            printf("\n");
 
             struct tcphdr *tp;
             tp = (struct tcphdr*)pkt_data;
-            pkt_data += sizeof(struct tcphdr);
             uint16_t ch =ntohs(tp->check);
-
-            printf("sumsum = %04x\n",sumsum);
-            printf("check = %04x",ch);
+            pkt_data += sizeof(struct tcphdr);
 
 
+            printf("pseudo = 0x%x\n", sum1);
+            printf("sumsum = 0x%x\n",sumsum);
+            printf("check = 0x%x\n",ch);
+            int hi =sumsum-ch;
+            int bye =0;
+            bye = sum1+hi;
+            if(bye>=65536)
+                bye=bye-65536+1;
 
+            printf("fin check = 0x%x\n",~bye); //not연산 해결하기
 
-
-
-
-
-
-            /*
-            uint16_t tdp[11];
-            struct tcpheader tpp;
-            tpp.sport = ntohs(tp->source);
-            tpp.dport = ntohs(tp->dest);
-            tpp.seq   = ntohl(tp->seq);
-            tpp.ack_seq = ntohl(tp->ack_seq);
-            tpp.dataoff = total - iphdl;
-            tpp.flags = tp->th_flags;
-            tpp.window = tp->th_win;
-            tpp.checksum = 0; //tp->check;
-            tpp.urg_p = tp->urg_ptr;
-
-            printf("Src Port : %d\n", ntohs(tp->source));
-            printf("Dst Port : %d\n", ntohs(tp->dest));
-            printf("seq : %x\n",tp->seq);
-            printf("ack_seq : %x\n",tp->ack_seq);
-            printf("data_off : %x\n",total-iphdl);
-            printf("flag : %x\n",tp->th_flags);
-            printf("window : %x\n",tp->th_win);
-            printf("checksum : %x\n",tp->check);
-            printf("urg_ptr : %x\n",tp->urg_ptr);
-            memcpy(tdp,&tpp,sizeof(tpp));
-            int sum2=0;
-            for(int i=0; i<11; i++)
-            {
-                sum2 += tdp[i];
-                if(sum2>=65536)
-                {
-                    sum2=sum2-65536+1;
-                }
-            }
-            printf("TCP 헤더길이 = %04x\n", sum2);
-            int sum3=sum1+sum2;
-            if(sum3>=65536)
-                sum3=sum3-65536+1;
-            printf("sum1 + sum 2 = %04x \n",sum3);
-*/
 
             printf("******************* HOST PRINT*******************\n");
             print_host((u_char*)tp, length);
@@ -272,9 +248,11 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
     else
         printf("NO MATCH IP PACKET\n");
 */
+        }
+    }
 }
-}
-}
+
+
 void print_mac(uint8_t *mac, uint8_t *box)
 {
     memcpy(box,mac,6);
@@ -283,6 +261,7 @@ void print_mac(uint8_t *mac, uint8_t *box)
 
     printf("\n");
 }
+
 
 void print_host(u_char *data, int leng)
 {
