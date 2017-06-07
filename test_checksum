@@ -150,7 +150,8 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
             else
                 cal_tcp=tcp_tcpdata/2;
 
-            printf("tcph + tcpdata len = %d\n", cal_tcp);
+            printf("tcp_tcpdata(total - iphdl) = %d\n", tcp_tcpdata);
+            printf("cal_tcp = %d\n", cal_tcp);
             struct pseudo pd;
 
             uint16_t pdp[7];
@@ -180,14 +181,11 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
             int i=0;
             while(i<cal_tcp)
             {
-                /*
-                if(tcp_tcpdata % 2==1)
+                if((i+1==cal_tcp) && i % 2 == 1)
                 {
-                    if(tcp_tcpdata-1==i)
-                        tdata[tcp_tcpdata-1==i]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
+                        tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
                 }
                 else
-                */
                 tdata[i] = ntohs(*(p++));
                 sumsum += tdata[i];
                 i++;
