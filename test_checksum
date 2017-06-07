@@ -134,7 +134,7 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
         printf("%s\n",dst_ip);
 
 
-        if(ipp->protocol==IPPROTO_TCP)
+        if(ipp->protocol==0x06)
         {
             pkt_data += sizeof(struct iphdr);
 
@@ -182,13 +182,12 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
             while(i<cal_tcp)
             {
                 if((i+1==cal_tcp) && i % 2 == 1)
-                {
-                        tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
-                }
+                    tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
                 else
-                tdata[i] = ntohs(*(p++));
-                sumsum += tdata[i];
-                i++;
+                    tdata[i] = ntohs(*(p++));
+
+                sumsum += tdata[i++];
+
                 if(sumsum>=65536)
                 {
                     sumsum=sumsum-65536+1;
@@ -213,17 +212,17 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
             pkt_data += sizeof(struct tcphdr);
 
 
-            printf("pseudo = 0x%x\n", sum1);
-            printf("sumsum = 0x%x\n",sumsum);
-            printf("check = 0x%x\n",ch);
+            printf("pseudo = 0x%04x\n", sum1);
+            printf("sumsum = 0x%04x\n",sumsum);
+            printf("check = 0x%04x\n",ch);
             int hi =sumsum-ch;
             int bye =0;
             bye = sum1+hi;
             if(bye>=65536)
                 bye=bye-65536+1;
 
-            printf("fin check = 0x%x\n",~bye); //not연산 해결하기
-
+            printf("fin check = 0x%04x\n",bye); //not연산 해결하기
+            //111개차이가남 check
 
             printf("******************* HOST PRINT*******************\n");
             print_host((u_char*)tp, length);
