@@ -138,6 +138,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("tcp_tcpdata(total - iphdl) = %d\n", tcp_tcpdata);
                     printf("cal_tcp = %d\n", cal_tcp);
 
+
+
+                    //tcp checksum
+
                     uint16_t tdata[cal_tcp]{0};
                     int sumsum{0};
                     uint16_t *p = (uint16_t*)data; //2byte로 받기 위해서 포인터로 집어줌
@@ -178,21 +182,21 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("pseudo = 0x%04x\n", sum);
                     printf("sumsum = 0x%04x\n",sumsum);
                     printf("check = 0x%04x\n",ch);
-                    int hi =sumsum-ch;
-                    int bye =0;
+
+                    int hi =sumsum-ch; //uint16_t 로 fix
+                    int bye =0;      //uint16_t 로 fix // hi와 bye 변수명 변경 carry 부분 함수화하기 //hacking 이 abcdef 로 바뀌는 부분이 위치가 잘못되서 옮겨줘야함
                     bye = sum+hi;
                     if(bye>=65536)
                         bye=bye-65536+1;
 
                     printf("fin check = 0x%04x\n",bye);
+                    printf("fin check 을 1의 보수화하면 checksum = 0x%04x\n",~bye);
 
                     char *body = change1;
                     char *find = (char*)data;
                     search(body,find,ret);
                     printf("\n\n%s\n",find);
 
-
-                    //tcp checksum
 
 
                     for(; ret>0; ret--)
