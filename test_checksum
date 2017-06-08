@@ -194,6 +194,9 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
                     sumsum=sumsum-65536+1;
                 }
             }
+            struct tcphdr *tp;
+            tp = (struct tcphdr*)pkt_data;
+            uint16_t ch =ntohs(tp->check);
             int j=0;
             while(j<tcp_tcpdata)
             {
@@ -205,9 +208,7 @@ void callback(struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
 
             printf("\n");
 
-            struct tcphdr *tp;
-            tp = (struct tcphdr*)pkt_data;
-            uint16_t ch =ntohs(tp->check);
+
             pkt_data += sizeof(struct tcphdr);
 
 
