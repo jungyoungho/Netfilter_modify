@@ -23,25 +23,6 @@ struct pseudo_h
     uint8_t proto;
     uint8_t reserve;
     uint16_t tcpleng;
-    struct tcpheader;
-};
-
-struct tcpheader
-{
-    u_int16_t sport;		/* source port */
-    u_int16_t dport;		/* destination port */
-    u_int32_t seq;
-    u_int32_t ack_seq;
-    u_int8_t dataoff:4;		/* data offset */
-    u_int8_t flags;
-    u_int16_t window;		/* window */
-    u_int16_t checksum;		/* checksum */
-    u_int16_t urg_p;		/* urgent pointer */
-};
-struct mix
-{
-    struct pseudo_h;
-    struct tcpheader;
 };
 
 #pragma pack(pop)
@@ -50,7 +31,6 @@ char * condi;
 int drop_mess;
 char * change1;
 char * change2;
-
 
 void search(char *body, char *find, int length)
 {
@@ -122,12 +102,89 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 struct iphdr *ipp;
                 ipp=(struct iphdr*)data;
 
+                int iphdl = (ipp->ihl)*4;
+                int total = ntohs(ipp->tot_len);
+                int tcp_tcpdata = total - iphdl;
+
+                //pseudo checksum
+                uint16_t csp[7];
+                struct pseudo_h cs;
+                cs.sd=ntohl(ipp->saddr);
+                cs.dd=ntohl(ipp->daddr);
+                cs.proto=ipp->protocol;
+                cs.reserve=0;
+                cs.tcpleng=tcp_tcpdata;
+
+                memcpy(csp,&cs,sizeof(cs));  //sizeof 뭔가 고쳐야할듯
+                int sum{0};
+                for(int i=0; i<7; i++)
+                {
+                    sum += csp[i];
+                    if(sum>=65536)  //carry think
+                    {
+                        sum=sum-65536+1;
+                    }
+                }
                 if(ipp->protocol == IPPROTO_TCP)
                 {
-                    data += ipp->ihl*4;
+                    data += iphdl;
+                    int cal_tcp;
+                    if(tcp_tcpdata % 2 == 1)
+                        cal_tcp=tcp_tcpdata/2 + 1;
+                    else
+                        cal_tcp=tcp_tcpdata/2;
+
+                    printf("\n qseudo 헤더 = %04x \n",sum);
+                    printf("tcp_tcpdata(total - iphdl) = %d\n", tcp_tcpdata);
+                    printf("cal_tcp = %d\n", cal_tcp);
+
+                    uint16_t tdata[cal_tcp]{0};
+                    int sumsum{0};
+                    uint16_t *p = (uint16_t*)data; //2byte로 받기 위해서 포인터로 집어줌
+                    int i=0;
+                    while(i<cal_tcp)
+                    {
+                        if((i+1==cal_tcp) && i % 2 == 1)
+                            tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
+                        else
+                            tdata[i] = ntohs(*(p++));
+
+                        sumsum += tdata[i++];
+
+                        if(sumsum>=65536)
+                        {
+                            sumsum=sumsum-65536+1;
+                        }
+                    }
+
                     struct tcphdr *tp;
                     tp = (struct tcphdr*)data;
+                    uint16_t ch =ntohs(tp->check);
+
+                    int ch_count2{0};
+                    int j=0;
+                    while(j<tcp_tcpdata)
+                    {
+                    printf("%02x ", *(data++));
+                    j++;
+                    if(++ch_count2 % 16 == 0)
+                        printf("\n");
+                    }
+                    printf("\n");
+
                     data += tp->th_off * 4;
+
+
+                    printf("pseudo = 0x%04x\n", sum);
+                    printf("sumsum = 0x%04x\n",sumsum);
+                    printf("check = 0x%04x\n",ch);
+                    int hi =sumsum-ch;
+                    int bye =0;
+                    bye = sum+hi;
+                    if(bye>=65536)
+                        bye=bye-65536+1;
+
+                    printf("fin check = 0x%04x\n",bye-111);
 
                     char *body = change1;
                     char *find = (char*)data;
@@ -135,52 +192,8 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("\n\n%s\n",find);
 
 
-                    //pseudo checksum
-                    uint16_t csp[5];
-                    struct pseudo_h *cs;
-                    cs=(struct pseudo_h *)data;
-                    cs->sd=ntohl(ipp->saddr);
-                    cs->dd=ntohl(ipp->daddr);
-                    cs->proto=0x06;
-                    cs->reserve=0;
-                    cs->tcpleng=tp->doff;
-
-                    memcpy(csp,&cs,sizeof(cs));  //sizeof 뭔가 고쳐야할듯?
-
-                    int sum;
-                    for(int i=0; i<5; i++)
-                    {
-                        sum += csp[i];
-                        if(sum>=65536)
-                        {
-                            sum=sum-65536+1;
-                        }
-                    }
-                    printf("\n qseudo 헤더 = %04x \n",sum);
-
                     //tcp checksum
-                     uint16_t tdp[10];
-                    struct tcpheader tcph;
-                    tcph.sport = tp->th_sport;
-                    tcph.dport = tp->th_dport;
-                    tcph.seq = tp->seq;
-                    tcph.ack_seq = tp->ack_seq;
-                    tcph.dataoff = tp->th_off;
-                    tcph.flags = tp->th_flags;
-                    tcph.window = tp->th_win;
-                    tcph.checksum = 0;
-                    tcph.urg_p = tp->urg_ptr;
 
-                    memcpy(tdp,&tcph,sizeof(tcph)); //sizeof 뭔가 고쳐야할듯?
-                    int sum2;
-                    for(int i=0; i<10; i++)
-                    {
-                        sum2 += tdp[i];
-                        if(sum2>=65536)
-                        {
-                            sum2=sum2-65536+1;
-                        }
-                    }
 
                     for(; ret>0; ret--)
                     {
