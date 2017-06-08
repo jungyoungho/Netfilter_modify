@@ -184,7 +184,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     if(bye>=65536)
                         bye=bye-65536+1;
 
-                    printf("fin check = 0x%04x\n",bye-111);
+                    printf("fin check = 0x%04x\n",bye);
 
                     char *body = change1;
                     char *find = (char*)data;
