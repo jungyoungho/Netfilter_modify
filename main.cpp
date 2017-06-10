@@ -25,6 +25,7 @@ struct pseudo_h
     uint16_t tcpleng;
 };
 
+
 #pragma pack(pop)
 
 char * condi;
@@ -50,6 +51,20 @@ void search(char *body, char *find, int length)
     }
 
 }
+
+void cal_carry(int sum)
+{
+    if(sum>=65536)
+    {
+        sum=sum-65536+1;
+    }
+}
+
+void make_packet(struct iphdr *ipp, uint16_t *b)
+{
+
+}
+
 
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -120,14 +135,28 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 for(int i=0; i<7; i++)
                 {
                     sum += csp[i];
-                    if(sum>=65536)  //carry think
-                    {
-                        sum=sum-65536+1;
-                    }
+                    cal_carry(sum);
                 }
+
                 if(ipp->protocol == IPPROTO_TCP)
                 {
                     data += iphdl;
+                    struct tcphdr *tp;
+                    tp = (struct tcphdr*)data;
+
+                    printf("\n");
+                    uint16_t ch =ntohs(tp->check);
+
+                    printf("\n");
+                    tp->check=0x0; //체크섬 계산을 위해 0으로 맞춤
+                    data += tp->th_off * 4;
+                    char *body = change1;
+                    char *find = (char*)data;
+                    search(body,find,ret);
+                    printf("\n\n%s\n",find);
+
+                    data -=tp->th_off * 4; //다시 바뀐값에서의 데이터 끼리의 합을 구하기위해
+
                     int cal_tcp;
                     if(tcp_tcpdata % 2 == 1)
                         cal_tcp=tcp_tcpdata/2 + 1;
@@ -139,8 +168,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("cal_tcp = %d\n", cal_tcp);
 
 
-
-                    //tcp checksum
+                    //tcp checksum 계산
 
                     uint16_t tdata[cal_tcp]{0};
                     int sumsum{0};
@@ -149,24 +177,47 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     while(i<cal_tcp)
                     {
                         if((i+1==cal_tcp) && i % 2 == 1)
-                            tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결하기
+                            tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결
                         else
                             tdata[i] = ntohs(*(p++));
 
                         sumsum += tdata[i++];
 
-                        if(sumsum>=65536)
+                        if(sumsum>=65536)  //함수화하면 값이 이상함
                         {
                             sumsum=sumsum-65536+1;
                         }
                     }
+                    printf("pseudo = 0x%04x\n", sum);
+                    printf("sumsum = 0x%04x\n",sumsum);
+                    int cal1 =sumsum-ch;
+                    int cal2 =0;      // 변경 carry 부분 함수화하기
+                    cal2 = sum+cal1;
+                    if(cal2>=65536)
+                        cal2=cal2-65536+1;
 
-                    struct tcphdr *tp;
-                    tp = (struct tcphdr*)data;
-                    uint16_t ch =ntohs(tp->check);
+                    uint16_t fin_check = (uint16_t)~cal2;
+                    printf("fin check = 0x%04x\n",cal2);
+                    printf("fin check 을 1의 보수화하면 checksum = 0x%04x\n", fin_check);
+                    tp->check=ntohs(fin_check);
+
+                    //바뀐 체크썸을 tdata 배열에 넣어주는 과정
+                    i=0;
+                    while(i<cal_tcp)
+                    {
+                        if((i+1==cal_tcp) && i % 2 == 1)
+                            tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결
+                        else
+                            tdata[i] = ntohs(*(p++));
+                        i++;
+                    }
+
+                    //넣어주고 패킷만들어서 보내면 끝!
 
                     int ch_count2{0};
                     int j=0;
+
+                    //바뀐 값의 패킷 확인
                     while(j<tcp_tcpdata)
                     {
                     printf("%02x ", *(data++));
@@ -176,51 +227,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     }
                     printf("\n");
 
-                    data += tp->th_off * 4;
-
-
-                    printf("pseudo = 0x%04x\n", sum);
-                    printf("sumsum = 0x%04x\n",sumsum);
-                    printf("check = 0x%04x\n",ch);
-
-                    int cal1 =sumsum-ch;
-                    int cal2 =0;      // 변경 carry 부분 함수화하기
-                    cal2 = sum+cal1;
-                    if(cal2>=65536)
-                        cal2=cal2-65536+1;
-
-                    uint16_t fin_check = (uint16_t)~cal2;
-                    printf("fin check = 0x%04x\n",cal2);
-                    printf("fin check 을 1의 보수화하면 checksum = 0x%04x\n",fin_check);
-
-                    char *body = change1;
-                    char *find = (char*)data;
-                    search(body,find,ret);
-                    printf("\n\n%s\n",find);
-
-
-
-                    for(; ret>0; ret--)
-                    {
-                        uint32_t *host_start = (uint32_t *)data;
-                        if(*host_start == ntohl(0x486f7374))
-                        {
-                           int len = strlen(condi);
-                           if(memcmp(condi,(char*)data+6,len)==0) // or strncmp
-                           {
-                                drop_mess=1;
-                                printf(">> This URL is Drop!!\n");
-                                break;
-                           }
-                           else
-                           {
-                               drop_mess=0;
-                               break;
-                           }
-                        }
-                        else
-                            data++;
-                    }
+                    make_packet(ipp, tdata);
            }
            printf("payload_len=%d ", ret);
            fputc('\n', stdout);
