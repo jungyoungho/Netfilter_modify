@@ -24,14 +24,11 @@ struct pseudo_h
     uint8_t reserve;
     uint16_t tcpleng;
 };
-
-
 #pragma pack(pop)
 
-char * condi;
-int drop_mess;
 char * change1;
 char * change2;
+
 
 void search(char *body, char *find, int length)
 {
@@ -60,12 +57,6 @@ void cal_carry(int sum)
     }
 }
 
-void make_packet(struct iphdr *ipp, uint16_t *b)
-{
-
-}
-
-
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
 
@@ -79,7 +70,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     ph = nfq_get_msg_packet_hdr(tb);
     if (ph) {
         id = ntohl(ph->packet_id);
-        printf("hw_protocol=0x%04x hook=%u id=%u ", ntohs(ph->hw_protocol), ph->hook, id);  //ph?
+        printf("hw_protocol=0x%04x hook=%u id=%u ", ntohs(ph->hw_protocol), ph->hook, id);
     }
 
     hwph = nfq_get_packet_hw(tb);
@@ -130,7 +121,9 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 cs.reserve=0;
                 cs.tcpleng=tcp_tcpdata;
 
-                memcpy(csp,&cs,sizeof(cs));  //sizeof 뭔가 고쳐야할듯
+                memcpy(csp,&cs,sizeof(cs));
+
+
                 int sum{0};
                 for(int i=0; i<7; i++)
                 {
@@ -155,7 +148,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     search(body,find,ret);
                     printf("\n\n%s\n",find);
 
-                    data -=tp->th_off * 4; //다시 바뀐값에서의 데이터 끼리의 합을 구하기위해
+                    data -= tp->th_off * 4; //다시 바뀐값에서의 데이터 끼리의 합을 구하기위해
 
                     int cal_tcp;
                     if(tcp_tcpdata % 2 == 1)
@@ -212,7 +205,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         i++;
                     }
 
-                    //넣어주고 패킷만들어서 보내면 끝!
 
                     int ch_count2{0};
                     int j=0;
@@ -227,7 +219,13 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     }
                     printf("\n");
 
-                    make_packet(ipp, tdata);
+
+                    //printf("cs=%d    tdata = %d ", sizeof(ipp), tcp_tcpdata);
+                    //넣어주고 패킷만들어서 보내면 끝!
+                    uint8_t mpack[iphdl+tcp_tcpdata];
+                    memcpy(mpack,&ipp,iphdl);
+                    memcpy(mpack+sizeof(cs), tdata, tcp_tcpdata);
+
            }
            printf("payload_len=%d ", ret);
            fputc('\n', stdout);
@@ -240,23 +238,18 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *
     u_int32_t id = print_pkt(nfa);
     printf("Entering callback\n");
 
-    if(drop_mess ==1)
-        return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-
-    else if(drop_mess==0)
-            return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
 int main(int argc, char *argv[])
 {
-    if(argc!=4)
+    if(argc!=3)
     {
         printf(" 사용법 : <Write URL> <Want Word> <Change Word\n");
         return 0;
     }
-    condi = argv[1];
-    change1 = argv[2];
-    change2 = argv[3];
+    change1 = argv[1];
+    change2 = argv[2];
     struct nfq_handle *h;
     struct nfq_q_handle *qh;
     struct nfnl_handle *nh;
