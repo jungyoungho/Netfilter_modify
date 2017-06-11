@@ -28,7 +28,7 @@ struct pseudo_h
 
 char * change1;
 char * change2;
-
+uint8_t pack[457];//FIX, temp check
 
 void search(char *body, char *find, int length)
 {
@@ -107,7 +107,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     {
                 struct iphdr *ipp;
                 ipp=(struct iphdr*)data;
-
                 int iphdl = (ipp->ihl)*4;
                 int total = ntohs(ipp->tot_len);
                 int tcp_tcpdata = total - iphdl;
@@ -220,12 +219,13 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("\n");
 
 
-                    //printf("cs=%d    tdata = %d ", sizeof(ipp), tcp_tcpdata);
+                    printf("ipp=%d    cs = %d ", sizeof(ipp), sizeof(cs));
                     //넣어주고 패킷만들어서 보내면 끝!
+
                     uint8_t mpack[iphdl+tcp_tcpdata];
                     memcpy(mpack,&ipp,iphdl);
-                    memcpy(mpack+sizeof(cs), tdata, tcp_tcpdata);
-
+                    memcpy(mpack+iphdl, tdata, tcp_tcpdata);
+                    memcpy(pack, mpack, 457); //FIX, temp check
            }
            printf("payload_len=%d ", ret);
            fputc('\n', stdout);
@@ -238,14 +238,14 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *
     u_int32_t id = print_pkt(nfa);
     printf("Entering callback\n");
 
-    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, pack);
 }
 
 int main(int argc, char *argv[])
 {
     if(argc!=3)
     {
-        printf(" 사용법 : <Write URL> <Want Word> <Change Word\n");
+        printf(" 사용법 : <Want Word> <Change Word\n");
         return 0;
     }
     change1 = argv[1];
