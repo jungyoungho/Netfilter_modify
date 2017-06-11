@@ -24,11 +24,12 @@ struct pseudo_h
     uint8_t reserve;
     uint16_t tcpleng;
 };
-#pragma pack(pop)
 
+#pragma pack(pop)
+int lenlen;
 char * change1;
 char * change2;
-uint8_t pack[457];//FIX, temp check
+uint8_t pack[477];//FIX, temp check
 
 void search(char *body, char *find, int length)
 {
@@ -105,11 +106,16 @@ static u_int32_t print_pkt (struct nfq_data *tb)
     ret = nfq_get_payload(tb, &data);
     if (ret >= 0)
     {
+
                 struct iphdr *ipp;
                 ipp=(struct iphdr*)data;
+
+
                 int iphdl = (ipp->ihl)*4;
                 int total = ntohs(ipp->tot_len);
                 int tcp_tcpdata = total - iphdl;
+
+                uint8_t ip_pack[iphdl]; //temp
 
                 //pseudo checksum
                 uint16_t csp[7];
@@ -175,7 +181,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
                         sumsum += tdata[i++];
 
-                        if(sumsum>=65536)  //함수화하면 값이 이상함
+                        if(sumsum>=65536)  //함수화하면 값이 이상함??
                         {
                             sumsum=sumsum-65536+1;
                         }
@@ -194,38 +200,37 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     tp->check=ntohs(fin_check);
 
                     //바뀐 체크썸을 tdata 배열에 넣어주는 과정
-                    i=0;
-                    while(i<cal_tcp)
+                    int su=0;
+                    while(su<cal_tcp)
                     {
-                        if((i+1==cal_tcp) && i % 2 == 1)
+                        if((su+1==cal_tcp) && su % 2 == 1)
                             tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결
                         else
-                            tdata[i] = ntohs(*(p++));
-                        i++;
+                            tdata[su] = ntohs(*(p++));
+                        su++;
                     }
 
-
-                    int ch_count2{0};
+                    data -= iphdl; //다시 총패킷을 구하기위해 iphdr의 시작점으로
+                    uint8_t tcp_pack[tcp_tcpdata];  //16비트인 tcp data를 8비트로 바꾼패킷
                     int j=0;
-
-                    //바뀐 값의 패킷 확인
-                    while(j<tcp_tcpdata)
+                    while(j<total)  //패킷을 배열에 넣어서 패킷완성(iphdr ~ tcpdata)
                     {
-                    printf("%02x ", *(data++));
-                    j++;
-                    if(++ch_count2 % 16 == 0)
-                        printf("\n");
+                        //printf("%02x ", *data);
+                        tcp_pack[j]= *(data++);
+                        j++;
+                    }
+
+                    memcpy(pack, tcp_pack, total); //보낼패킷을 전역변수에 복사
+                    lenlen = total; //만든패킷의길이 전역변수에 복사
+
+                    int cc=0;
+                    for(int i=0 ; i<total; i++)
+                    {
+                         printf("%02x ", tcp_pack[i]);
+                         if(++cc % 16 == 0)
+                            printf("\n");
                     }
                     printf("\n");
-
-
-                    printf("ipp=%d    cs = %d ", sizeof(ipp), sizeof(cs));
-                    //넣어주고 패킷만들어서 보내면 끝!
-
-                    uint8_t mpack[iphdl+tcp_tcpdata];
-                    memcpy(mpack,&ipp,iphdl);
-                    memcpy(mpack+iphdl, tdata, tcp_tcpdata);
-                    memcpy(pack, mpack, 457); //FIX, temp check
            }
            printf("payload_len=%d ", ret);
            fputc('\n', stdout);
@@ -238,7 +243,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *
     u_int32_t id = print_pkt(nfa);
     printf("Entering callback\n");
 
-    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, pack);
+    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL); //3,4번 인자를 이용하여 전송 3 = len 4 = 시작주소
 }
 
 int main(int argc, char *argv[])
