@@ -26,26 +26,24 @@ struct pseudo_h
 };
 
 #pragma pack(pop)
-int lenlen;
 char * change1;
 char * change2;
-uint8_t pack[477];//FIX, temp check
 
-void search(char *body, char *find, int length)
+void search(char *para1, char *find_tcpdata, int length)
 {
-    int len = strlen(body);
+    int len = strlen(para1);
 
     for(; length>0; length--)
     {
-            if(memcmp(body,find,len)==0)
+            if(memcmp(para1,find_tcpdata,len)==0)
             {
-                 memcpy(find,change2,len);    //찾은 문자열을 배열에 변수나 배열에 저장하고 change2와 바꾼다.
-                 find++;
-                 if(find==NULL)
+                 memcpy(find_tcpdata,change2,len);    //찾은 문자열을 배열에 변수나 배열에 저장하고 change2와 바꾼다.
+                 find_tcpdata++;
+                 if(find_tcpdata==NULL)
                      break;
             }
             else
-                find++;
+                find_tcpdata++;
     }
 
 }
@@ -115,8 +113,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 int total = ntohs(ipp->tot_len);
                 int tcp_tcpdata = total - iphdl;
 
-                uint8_t ip_pack[iphdl]; //temp
-
                 //pseudo checksum
                 uint16_t csp[7];
                 struct pseudo_h cs;
@@ -129,7 +125,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 memcpy(csp,&cs,sizeof(cs));
 
 
-                int sum{0};
+                int32_t sum{0};
                 for(int i=0; i<7; i++)
                 {
                     sum += csp[i];
@@ -148,10 +144,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("\n");
                     tp->check=0x0; //체크섬 계산을 위해 0으로 맞춤
                     data += tp->th_off * 4;
-                    char *body = change1;
-                    char *find = (char*)data;
-                    search(body,find,ret);
-                    printf("\n\n%s\n",find);
+                    char *para1 = change1;
+                    char *find_tcpdata = (char*)data;
+                    search(para1,find_tcpdata,ret);
+                    printf("\n\n%s\n",find_tcpdata);
 
                     data -= tp->th_off * 4; //다시 바뀐값에서의 데이터 끼리의 합을 구하기위해
 
@@ -161,7 +157,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     else
                         cal_tcp=tcp_tcpdata/2;
 
-                    printf("\n qseudo 헤더 = %04x \n",sum);
+                    printf("\nqseudo 헤더 = %04x \n",sum);
                     printf("tcp_tcpdata(total - iphdl) = %d\n", tcp_tcpdata);
                     printf("cal_tcp = %d\n", cal_tcp);
 
@@ -169,7 +165,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     //tcp checksum 계산
 
                     uint16_t tdata[cal_tcp]{0};
-                    int sumsum{0};
+                    int32_t sumsum{0};
                     uint16_t *p = (uint16_t*)data; //2byte로 받기 위해서 포인터로 집어줌
                     int i=0;
                     while(i<cal_tcp)
@@ -188,7 +184,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     }
                     printf("pseudo = 0x%04x\n", sum);
                     printf("sumsum = 0x%04x\n",sumsum);
-                    int cal1 =sumsum-ch;
+                    int32_t cal1 =sumsum-ch;
                     int cal2 =0;      // 변경 carry 부분 함수화하기
                     cal2 = sum+cal1;
                     if(cal2>=65536)
@@ -199,19 +195,8 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     printf("fin check 을 1의 보수화하면 checksum = 0x%04x\n", fin_check);
                     tp->check=ntohs(fin_check);
 
-                    //바뀐 체크썸을 tdata 배열에 넣어주는 과정
-                    int su=0;
-                    while(su<cal_tcp)
-                    {
-                        if((su+1==cal_tcp) && su % 2 == 1)
-                            tdata[cal_tcp-1]=(uint8_t)*p;  //2바이트씩 묶엇을때 홀수일경우 해결
-                        else
-                            tdata[su] = ntohs(*(p++));
-                        su++;
-                    }
-
                     data -= iphdl; //다시 총패킷을 구하기위해 iphdr의 시작점으로
-                    uint8_t tcp_pack[tcp_tcpdata];  //16비트인 tcp data를 8비트로 바꾼패킷
+                    uint8_t tcp_pack[total];  //16비트인 tcp data를 8비트로 바꾼패킷
                     int j=0;
                     while(j<total)  //패킷을 배열에 넣어서 패킷완성(iphdr ~ tcpdata)
                     {
@@ -220,8 +205,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                         j++;
                     }
 
-                    memcpy(pack, tcp_pack, total); //보낼패킷을 전역변수에 복사
-                    lenlen = total; //만든패킷의길이 전역변수에 복사
 
                     int cc=0;
                     for(int i=0 ; i<total; i++)
@@ -321,4 +304,3 @@ int main(int argc, char *argv[])
 
     exit(0);
 }
-
