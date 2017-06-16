@@ -48,12 +48,15 @@ void search(char *para1, char *find_tcpdata, int length)
 
 }
 
-void cal_carry(int sum)
+int32_t cal_carry(int32_t sum)
 {
     if(sum>=65536)
     {
         sum=sum-65536+1;
+        return sum;
     }
+    else
+        return sum;
 }
 
 static u_int32_t print_pkt (struct nfq_data *tb)
@@ -109,9 +112,9 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 ipp=(struct iphdr*)data;
 
 
-                int iphdl = (ipp->ihl)*4;
-                int total = ntohs(ipp->tot_len);
-                int tcp_tcpdata = total - iphdl;
+                int32_t iphdl = (ipp->ihl)*4;
+                int32_t total = ntohs(ipp->tot_len);
+                int32_t tcp_tcpdata = total - iphdl;
 
                 //pseudo checksum
                 uint16_t csp[7];
@@ -122,14 +125,13 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                 cs.reserve=0;
                 cs.tcpleng=tcp_tcpdata;
 
-                memcpy(csp,&cs,sizeof(cs));
-
+                memcpy(csp,&cs,sizeof(cs));  //memcpy사용하지 않고 계산해라
 
                 int32_t sum{0};
                 for(int i=0; i<7; i++)
                 {
                     sum += csp[i];
-                    cal_carry(sum);
+                    sum=cal_carry(sum);
                 }
 
                 if(ipp->protocol == IPPROTO_TCP)
@@ -176,16 +178,13 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                             tdata[i] = ntohs(*(p++));
 
                         sumsum += tdata[i++];
+                        sumsum=cal_carry(sumsum);
 
-                        if(sumsum>=65536)  //함수화하면 값이 이상함??
-                        {
-                            sumsum=sumsum-65536+1;
-                        }
                     }
-                    printf("pseudo = 0x%04x\n", sum);
+                    printf("pseudo = 0x%04x\n",sum);
                     printf("sumsum = 0x%04x\n",sumsum);
                     int32_t cal1 =sumsum-ch;
-                    int cal2 =0;      // 변경 carry 부분 함수화하기
+                    int32_t cal2 =0;      // 변경 carry 부분 함수화하기
                     cal2 = sum+cal1;
                     if(cal2>=65536)
                         cal2=cal2-65536+1;
