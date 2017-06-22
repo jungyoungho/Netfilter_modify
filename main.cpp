@@ -28,25 +28,26 @@ struct pseudo_h
 #pragma pack(pop)
 
 char * change1;
-char * change2;
+char * para2;
+uint32_t total_len;
+u_char *pp;
 
-void search(char *para1, char *find_tcpdata, int length)
+void search(char *para1, char *tcp_data, int length)
 {
     int len = strlen(para1);
 
     for(; length>0; length--)
     {
-            if(memcmp(para1,find_tcpdata,len)==0)
+            if(memcmp(para1,tcp_data,len)==0)
             {
-                 memcpy(find_tcpdata,change2,len);    //찾은 문자열을 배열에 변수나 배열에 저장하고 change2와 바꾼다.
-                 find_tcpdata++;
-                 if(find_tcpdata==NULL)
+                 memcpy(tcp_data,para2,len);    //찾은 문자열을 배열에 변수나 배열에 저장하고 change2와 바꾼다.
+                 tcp_data++;
+                 if(tcp_data==NULL)
                      break;
             }
             else
-                find_tcpdata++;
+                tcp_data++;
     }
-
 }
 
 int32_t cal_carry(int32_t sum)
@@ -148,9 +149,9 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     tp->check=0x0; //체크섬 계산을 위해 0으로 맞춤
                     data += tp->th_off * 4;
                     char *para1 = change1;
-                    char *find_tcpdata = (char*)data;
-                    search(para1,find_tcpdata,ret);
-                    printf("\n\n%s\n",find_tcpdata);
+                    char *tcp_data = (char*)data;
+                    search(para1,tcp_data,ret);
+                    printf("\n\n%s\n",tcp_data);
 
                     data -= tp->th_off * 4; //다시 바뀐값에서의 데이터 끼리의 합을 구하기위해
 
@@ -200,7 +201,6 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                     int j=0;
                     while(j<total)  //패킷을 배열에 넣어서 패킷완성(iphdr ~ tcpdata)
                     {
-                        //printf("%02x ", *data);
                         pack[j]= *(data++);
                         j++;
                     }
@@ -212,10 +212,10 @@ static u_int32_t print_pkt (struct nfq_data *tb)
                          if(++cc % 16 == 0)
                             printf("\n");
                     }
+                    total_len = ret;
+                    pp= (u_char*)pack;
                     printf("\n");
            }
-
-
            printf("payload_len=%d ", ret);
            fputc('\n', stdout);
     }
@@ -224,10 +224,11 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data)
 {
+    (void)nfmsg;
     u_int32_t id = print_pkt(nfa);
     printf("Entering callback\n");
 
-    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL ); //3,4번 인자를 이용하여 전송 3 = len 4 = 시작주소
+    return nfq_set_verdict(qh, id, NF_ACCEPT, total_len, pp); //3,4번 인자를 이용하여 전송 3 = len 4 = 시작주소
 }
 
 int main(int argc, char *argv[])
@@ -238,7 +239,7 @@ int main(int argc, char *argv[])
         return 0;
     }
     change1 = argv[1];
-    change2 = argv[2];
+    para2 = argv[2];
     struct nfq_handle *h;
     struct nfq_q_handle *qh;
     struct nfnl_handle *nh;
